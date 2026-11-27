@@ -52,19 +52,20 @@ export function FloorBanners({
   const held = useTurnHeld(encounter);
   // "Suggest my move" (winks fork): options for this turn only, so they are
   // keyed like the refusal and vanish when the turn moves on.
-  const [suggestEntry, setSuggestEntry] = useState<{ key: string; options: MoveSuggestion[]; error: string } | null>(null);
+  const [suggestEntry, setSuggestEntry] = useState<{ stamp: string; options: MoveSuggestion[]; error: string } | null>(null);
   const [suggesting, setSuggesting] = useState(false);
-  const suggestions = suggestEntry && suggestEntry.key === refusalKey ? suggestEntry : null;
+  const turnStamp: string = refusalKey;
+  const suggestions = suggestEntry && suggestEntry.stamp === turnStamp ? suggestEntry : null;
 
   async function suggest() {
     setSuggesting(true);
-    const key = refusalKey;
+    const stamp = turnStamp;
     try {
       const response = await fetch(`/api/campaigns/${campaignId}/suggest`, { method: "POST" });
       const data = (await response.json().catch(() => ({}))) as { options?: MoveSuggestion[]; error?: string };
-      setSuggestEntry({ key, options: response.ok ? (data.options ?? []) : [], error: response.ok ? "" : (data.error ?? t("No suggestions right now.")) });
+      setSuggestEntry({ stamp, options: response.ok ? (data.options ?? []) : [], error: response.ok ? "" : (data.error ?? t("No suggestions right now.")) });
     } catch {
-      setSuggestEntry({ key, options: [], error: t("Could not reach the table.") });
+      setSuggestEntry({ stamp, options: [], error: t("Could not reach the table.") });
     } finally {
       setSuggesting(false);
     }
