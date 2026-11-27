@@ -231,6 +231,8 @@ const CLASSIFIED = {
   // YES or NO.
   "src/lib/dm/arc.ts": { prose: 17, machine: 1 },
   "src/lib/dm/ask.ts": { prose: 2, machine: 0 },
+  // "Suggest my move" (winks fork): options the player reads.
+  "src/lib/dm/suggest.ts": { prose: 1, machine: 0 },
   "src/lib/dm/assist.ts": { prose: 2, machine: 0 },
   "src/lib/dm/beats.ts": { prose: 1, machine: 0 },
   // The chapter summary, and the span accounts a long chapter is condensed

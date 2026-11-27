@@ -14,6 +14,8 @@ import { trackUtilityCall } from "@/lib/dm/call-tracker";
 import { withLanguage } from "@/lib/dm/table-language-logic";
 import { arcTextTimeoutMs, type ChatMessage } from "@/lib/model-client";
 import { initiativeCharacter } from "@/lib/player-characters";
+import { ownTurnOf } from "@/lib/dm/held-turn";
+import { withoutRollMarkers } from "@/lib/dm/tool-text";
 import {
   SUGGEST_SYSTEM,
   describeFightForPlayer,
@@ -32,11 +34,10 @@ export async function suggestMoves(campaignId: string, userId: string): Promise<
   const encounter = getActiveEncounter(campaignId);
   const view = activePublicEncounter(campaignId);
   if (!encounter || !view?.orderReady) return { error: "Suggestions are for a fight in progress.", status: 409 };
-  const current = encounter.order[encounter.turnIndex];
   const sheets = listSheets(campaignId);
   // The character whose turn it is, if this player acts for it: their own
   // hero or a companion they command (the same rule the Hand follows).
-  const acting = current?.kind === "pc" ? initiativeCharacter(sheets, userId, current.characterId) : null;
+  const acting = sheets.find((sheet) => ownTurnOf(encounter, sheet.id) && initiativeCharacter(sheets, userId, sheet.id)) ?? null;
   if (!acting) return { error: "It is not your turn.", status: 409 };
 
   const fight = describeFightForPlayer({
@@ -57,9 +58,8 @@ export async function suggestMoves(campaignId: string, userId: string): Promise<
     turn: view.turn ?? null,
   });
   const recent = listRecentMessages(campaignId, RECENT_MESSAGES)
-    .filter((message) => message.authorType !== "system" || /turn|round|death save|falls|down/i.test(message.content))
     .map((message) => {
-      const text = message.content.replace(/\[roll:[^\]]+\]\s*/g, "").replace(/\s+/g, " ").trim();
+      const text = withoutRollMarkers(message.content).replace(/\s+/g, " ").trim();
       const clipped = text.length > RECENT_CHARS ? `…${text.slice(-RECENT_CHARS)}` : text;
       return `${message.authorType === "dm" ? "GM" : message.authorType === "player" ? "Player" : "Table"}: ${clipped}`;
     })

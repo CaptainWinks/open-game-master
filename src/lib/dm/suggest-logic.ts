@@ -40,13 +40,12 @@ function clip(text: unknown, max: number): string {
 // are dropped, unusable options skipped, at most SUGGEST_MAX_OPTIONS kept.
 // Null when nothing usable came back.
 export function parseSuggestions(raw: string): MoveSuggestion[] | null {
-  if (typeof raw !== "string") return null;
-  const start = raw.indexOf("{");
-  const end = raw.lastIndexOf("}");
-  if (start < 0 || end <= start) return null;
+  // Whatever stands before the first brace and after the last one goes.
+  const body = String(raw ?? "").replace(/^[^{]*/, "").replace(/[^}]*$/, "");
+  if (!body) return null;
   let data: unknown;
   try {
-    data = JSON.parse(raw.slice(start, end + 1));
+    data = JSON.parse(body);
   } catch {
     return null;
   }
@@ -72,7 +71,7 @@ export type FightViewInput = {
   round: number;
   actingName: string;
   order: Array<{ name: string; kind: string; hidden?: boolean }>;
-  enemies: Array<{ name: string; health: string; status: string; hidden?: boolean; conditions?: string[]; knockedOut?: boolean }>;
+  enemies: Array<{ name: string; health: string; status: "alive" | "dead" | "fled"; hidden?: boolean; conditions?: string[]; knockedOut?: boolean }>;
   party: Array<{ name: string; currentHp: number; maxHp: number; conditions: string[] }>;
   turn?: { actionUsed?: boolean; bonusUsed?: boolean; attacksMade?: number; attacksAllowed?: number; dashed?: boolean; disengaged?: boolean } | null;
 };
@@ -84,7 +83,7 @@ export function describeFightForPlayer(view: FightViewInput): string {
   lines.push(`Round ${view.round}. It is ${view.actingName}'s turn.`);
   const order = view.order.filter((entry) => !entry.hidden).map((entry) => entry.name);
   if (order.length) lines.push(`Turn order: ${order.join(", ")}.`);
-  const enemies = view.enemies.filter((enemy) => !enemy.hidden && enemy.status !== "dead" && enemy.status !== "fled");
+  const enemies = view.enemies.filter((enemy) => !enemy.hidden && enemy.status === "alive");
   lines.push(
     enemies.length
       ? `Enemies still in the fight:\n${enemies
