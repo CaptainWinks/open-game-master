@@ -3,6 +3,7 @@ import { allowedAppOrigin, appCorsHeaders, extraAppOrigins, isPreflight } from "
 import { describeLimit, judgeBody } from "@/lib/body-limits";
 import { maintenanceState } from "@/lib/maintenance";
 import { ISOLATION_HEADERS, pagesIsolated } from "@/lib/page-isolation";
+import { wakeOnPageLoad } from "@/lib/winks-wake";
 import {
   PORTAL_LOGOUT_PATH,
   PORTAL_ORIGIN_COOKIE,
@@ -58,7 +59,10 @@ function isolated(response: NextResponse): NextResponse {
 
 export function proxy(request: NextRequest) {
   const { pathname, search } = request.nextUrl;
-  if (!isDataPath(pathname)) return isolated(NextResponse.next());
+  if (!isDataPath(pathname)) {
+    wakeOnPageLoad({ headers: request.headers, hasCookie: (name) => request.cookies.has(name) });
+    return isolated(NextResponse.next());
+  }
   const appOrigin = allowedAppOrigin(request.headers.get("origin"), extra);
 
   if (appOrigin && isPreflight(request.method, request.headers.get("access-control-request-method"))) {
