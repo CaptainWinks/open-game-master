@@ -2160,6 +2160,7 @@
     "lib/dm/stabilize.ts#str-eq": [["key",2,"tool schema enums and field names, statuses, condition labels and ids (engine vocabulary)"],["english-source",1,"an SRD subclass feature's name (Circle of Mortality) against the sheet's textKey"]],
     "lib/dm/stabilize.ts#str-list": [["english-source",1,"reference: SRD feature names"],["key",1,"tool schema enums and field names, statuses, condition labels and ids (engine vocabulary)"]],
     "lib/dm/stabilize.ts#toLowerCase": [["key",2,"condition labels (engine vocabulary)"]],
+    "lib/dm/suggest.ts#str-list": [["key",1,"the prompt's fixed data markers (READ-ONLY DATA START/END), sent to the model like Ask's, never matched against text"]],
     "lib/dm/story-setup-logic.ts#str-eq": [["key",2,"tool schema enums and field names, statuses, condition labels and ids (engine vocabulary)"]],
     "lib/dm/story-moves-logic.ts#re-word": [["english-source",1,"ODM's own closing line in relationship_beat's note (\"Narrate exactly this much and no further step.\"), cut from it when the engine records a beat after the narration"]],
     "lib/dm/story-moves-logic.ts#str-key": [["key",2,"a pair's own key, by characterId and the subject's textKey"]],
