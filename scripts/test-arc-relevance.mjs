@@ -148,8 +148,23 @@ test("a scene-relevant event twelfth in the list is shown ahead of unrelated ear
   const held = trace.events.filter((pick) => !pick.included);
   assert.ok(held.length >= 8, `held ${held.length}`);
   assert.match(held[0].reason, /^held back: /);
-  assert.ok(text.includes("held back for room: " + held.map((pick) => pick.id).join(", ")));
+  // Listed in the arc's order (winks fork), whatever order relevance picked them in.
+  const arcOrder = (pick) => Number(pick.id.slice(2));
+  assert.ok(text.includes("held back for room: " + [...held].sort((a, b) => arcOrder(a) - arcOrder(b)).map((pick) => pick.id).join(", ")));
   assert.ok(text.includes("read_card"));
+});
+
+test("the same events render in the same order whatever the scene (winks fork: prompt cache)", () => {
+  const arc = bigArc({ beats: 4, events: 3 });
+  arc.events[0].trigger = "When the party reaches the lighthouse.";
+  arc.events[2].trigger = "When the party meets Marla at the mill.";
+  const eventLines = (text) => text.split("\n").filter((line) => /^- \[ev\d+\]/.test(line));
+  const atMill = renderArcPrompt(arc, { stopWords: stopWordsFor("english"), location: "The mill", npcs: ["Marla"] });
+  const atLighthouse = renderArcPrompt(arc, { stopWords: stopWordsFor("english"), location: "The lighthouse" });
+  assert.equal(atMill.trace.events[0].id, "ev3", "relevance still ranks the mill event first in the trace");
+  assert.equal(atLighthouse.trace.events[0].id, "ev1");
+  assert.deepEqual(eventLines(atMill.text), eventLines(atLighthouse.text));
+  assert.deepEqual(eventLines(atMill.text).map((line) => line.match(/\[(ev\d+)\]/)[1]), ["ev1", "ev2", "ev3"]);
 });
 
 test("without cues the events order by act hint, as before", () => {

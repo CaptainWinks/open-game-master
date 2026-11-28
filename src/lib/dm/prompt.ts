@@ -291,6 +291,15 @@ export type DmGameState = {
   // tokens and 140 seconds on a BC-250, where now the tools and rules are
   // reused. An agent program's rendering splits the prompt itself.
   stateAfterRules?: boolean;
+  // With momentAfterHistory and stateAfterRules both on: the standing state
+  // (everything from THIS_TURN_HEADING to the moment) rides after the
+  // transcript too, in the moment's message, so nothing between the rules
+  // and the history changes from turn to turn. A prompt cache that keeps
+  // the history then reuses it when the scene, the quests or an NPC's
+  // standing move, not only when the standing state stays word for word
+  // the same (winks fork: on Claude the history was written to the cache
+  // again on 10 of 11 turns). DM_STATE_AFTER_HISTORY=1 turns it on.
+  standingAfterHistory?: boolean;
   currentLocation?: {
     name: string;
     layoutDescription: string;
@@ -2038,14 +2047,33 @@ function turnRuleParts(state: TurnRuleState): {
     rulesCarrySecret = Boolean(secretRules);
   }
   const dmSystem = buildDmSystem(state.campaign, settingsRules, state.ruleContext ?? null);
-  const fightRules = state.encounter
-    ? `${encounterRulesText(tracksAmmunition(state.campaign), state.ruleContext ?? null)}\n${fightNarrationRule(state.campaign.gameSettings?.narrationLength)}`
-    : "";
+  const fightRules = state.encounter ? fightRulesText(state.campaign, state.ruleContext ?? null) : "";
   return { dmSystem, fightRules, secretRules, rulesCarrySecret };
 }
 
+// Whether a prompt message already holds a fight's rules (the full rules'
+// opening line, or the short rules' one).
+export function carriesFightRules(text: string): boolean {
+  return text.includes("Combat rules (an encounter is active):") || text.includes("A fight is on. Follow the initiative order in GAME STATE");
+}
+
+// A fight's rules: what the system message carries while one runs.
+export function fightRulesText(campaign: Campaign, ruleContext: RuleContext | null): string {
+  return `${encounterRulesText(tracksAmmunition(campaign), ruleContext)}\n${fightNarrationRule(campaign.gameSettings?.narrationLength)}`;
+}
+
+// With one tool list in and out of a fight (winks fork, DM_STEADY_TOOLS=1,
+// src/lib/dm/turn.ts steadyTurnTools), a fight's rules ride with the state
+// after the rules instead of in the system message, so a fight's start and
+// end leave the cached start of the prompt as it was. Only where the state
+// has its own message (stateAfterRules); src/lib/dm/turn.ts hands them to a
+// turn whose fight began after its prompt was built.
+function fightRulesWithState(): boolean {
+  return process.env.DM_STEADY_TOOLS === "1";
+}
+
 function rulesAhead(dmSystem: string, turnAt: number, fightRules: string): string {
-  return [dmSystem.slice(0, turnAt).trimEnd(), fightRules].filter(Boolean).join("\n\n");
+  return [dmSystem.slice(0, turnAt).trimEnd(), fightRulesWithState() ? "" : fightRules].filter(Boolean).join("\n\n");
 }
 
 // A turn's first message when its state rides after the rules
@@ -2303,7 +2331,7 @@ export function buildDmMessages(
   let table = "";
   if (turnAt >= 0) {
     rules = rulesAhead(dmSystem, turnAt, fightRules);
-    table = [dmSystem.slice(turnAt), whisperRules, gameStateBlock].filter(Boolean).join("\n\n");
+    table = [dmSystem.slice(turnAt), fightRulesWithState() ? fightRules : "", whisperRules, gameStateBlock].filter(Boolean).join("\n\n");
   }
   let moment = "";
   if (state.momentAfterHistory) {
@@ -2316,6 +2344,11 @@ export function buildDmMessages(
   // with the moment, after the transcript (src/lib/dm/narration-tidy-logic.ts).
   const sameClosing = repeatedClosing(history.filter((message) => message.authorType === "dm").map((message) => message.content));
   const variety = sameClosing ? closingVarietyNote(sameClosing) : "";
+  // The standing state after the transcript, ahead of the moment
+  // (standingAfterHistory): only with the moment there too, so the
+  // instruction to take the turn still closes the message.
+  const standingLast = table && moment && state.standingAfterHistory ? table : "";
+  if (standingLast) table = "";
   const historyStart = (table ? 2 : 1) + (gapNote ? 1 : 0);
   const messages: ChatMessage[] = [
     { role: "system", content: rules },
@@ -2325,7 +2358,7 @@ export function buildDmMessages(
     // The state, then the instruction to take the turn, so the newest player
     // line is still what the model resolves (src/lib/prompt-boundary.ts).
     ...(moment
-      ? [{ role: "user" as const, content: [moment, variety, MOMENT_INSTRUCTION].filter(Boolean).join("\n\n") }]
+      ? [{ role: "user" as const, content: [standingLast, moment, variety, MOMENT_INSTRUCTION].filter(Boolean).join("\n\n") }]
       : variety
         ? [{ role: "user" as const, content: variety }]
         : []),

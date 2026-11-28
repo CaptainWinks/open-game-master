@@ -203,8 +203,11 @@ import { itemsReadable, openItems, readItemMoves, settleItemClaims } from "@/lib
 import { unrecordedItemsPrompt, type EngineItemCall } from "@/lib/dm/item-claims-logic";
 import type { ItemClaim } from "@/lib/dm/item-read-logic";
 import { exchangeWords } from "@/lib/dm/story-moves";
+import { THIS_TURN_HEADING } from "@/lib/prompt-boundary";
 import {
   buildDmMessages,
+  carriesFightRules,
+  fightRulesText,
   type DmGameState,
   companionRules,
   relationshipRules,
@@ -1072,6 +1075,9 @@ async function openTurn(
       // The state keeps its place before the transcript, as its own message
       // (src/lib/dm/prompt.ts stateAfterRules).
       stateAfterRules: campaign.settings.textProvider !== "harness",
+      // And the standing state after the transcript as well (winks fork,
+      // src/lib/dm/prompt.ts standingAfterHistory).
+      standingAfterHistory: process.env.DM_STATE_AFTER_HISTORY === "1",
       currentLocation: currentLocation
         ? {
             name: currentLocation.name,
@@ -1739,6 +1745,36 @@ export function dmTurnTools(
   imageEnabled: boolean,
   leanTools: boolean,
 ): unknown[] {
+  return steadyTurnTools()
+    ? steadyToolList(turnToolsFor(campaign, false, imageEnabled, leanTools), turnToolsFor(campaign, true, imageEnabled, leanTools))
+    : turnToolsFor(campaign, inEncounter, imageEnabled, leanTools);
+}
+
+// One list in and out of a fight (winks fork, DM_STEADY_TOOLS=1): the list
+// rides at the very start of the prompt, so the swap a fight's start and
+// end made wrote the whole prompt to a provider's cache again (tools, rules
+// and history, ~$0.30 a fight on Claude). The fight-only tools refuse
+// themselves outside a fight ("No active encounter ... start_encounter
+// first"), and resting, shopping and the world tools refuse themselves in
+// one, so offering both sides changes what the model sees, not what it can
+// do; an agent program is handed the same whole catalogue already
+// (dmTurnToolCatalogue).
+export function steadyTurnTools(): boolean {
+  return process.env.DM_STEADY_TOOLS === "1";
+}
+
+function steadyToolList(outside: unknown[], inside: unknown[]): unknown[] {
+  const named = (tool: unknown) => (tool as ToolDefLike).function?.name;
+  const seen = new Set(outside.map(named));
+  return [...outside, ...inside.filter((tool) => !seen.has(named(tool)))];
+}
+
+function turnToolsFor(
+  campaign: Campaign,
+  inEncounter: boolean,
+  imageEnabled: boolean,
+  leanTools: boolean,
+): unknown[] {
   return [
     requestRollTool,
     requestPlayerInputTool,
@@ -2058,8 +2094,8 @@ function handleMoreTools(campaign: Campaign, turn: DmTurn, imageEnabled: boolean
 // bridge refuses any call the loop is not offering at that moment.
 export function dmTurnToolCatalogue(campaign: Campaign, imageEnabled: boolean, leanTools: boolean): unknown[] {
   return [
-    ...dmTurnTools(campaign, false, imageEnabled, leanTools),
-    ...dmTurnTools(campaign, true, imageEnabled, leanTools),
+    ...turnToolsFor(campaign, false, imageEnabled, leanTools),
+    ...turnToolsFor(campaign, true, imageEnabled, leanTools),
   ];
 }
 
@@ -2314,6 +2350,17 @@ async function runAdvance(context: TurnContext, turn: DmTurn) {
     // not even then when keepsToolsThroughFightStart covers it.
     const encounterNow = getActiveEncounter(campaignId);
     const inEncounter = Boolean(encounterNow);
+    // With one tool list for both sides of a fight, its rules ride with the
+    // state (src/lib/dm/prompt.ts fightRulesWithState), which a fight begun
+    // in this turn's calls is not in yet: they come as an update, once.
+    // Opened by the turn heading, so the guards that read the transcript's
+    // figures pass it over as they pass the state over (engine-boundary.ts).
+    if (inEncounter && steadyTurnTools() && !turn.conversation.some((message) => typeof message.content === "string" && carriesFightRules(message.content))) {
+      turn.conversation.push({
+        role: "user",
+        content: `${THIS_TURN_HEADING}\n[GAME STATE UPDATE] A fight began this turn. Its rules hold until it ends:\n\n${fightRulesText(campaign, null)}`,
+      });
+    }
     const sentBefore = sentTools;
     const keptTools: unknown[] | null =
       !compact &&

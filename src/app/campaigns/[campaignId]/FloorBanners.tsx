@@ -11,6 +11,7 @@ import { floorNoticeKey, liveNotice, type HandNotice } from "@/lib/battlemap/han
 import { useT } from "@/lib/locale";
 import type { CharacterSheet } from "@/lib/schemas/sheet";
 import { TurnHoldNote, useTurnHeld } from "@/app/campaigns/[campaignId]/TurnHoldNote";
+import type { MoveSuggestion } from "@/lib/dm/suggest-logic";
 
 // Spotlight, held-responses, and initiative banners above the composer;
 // the lead gets the release/skip buttons, the current player gets End turn.
@@ -23,6 +24,7 @@ export function FloorBanners({
   steersStory,
   meUserId = "",
   onRelease,
+  onUseSuggestion,
 }: {
   campaignId: string;
   floor: Floor;
@@ -32,6 +34,9 @@ export function FloorBanners({
   steersStory: boolean;
   meUserId?: string;
   onRelease: () => void;
+  // "Suggest my move" (winks fork): put a suggested action in the message
+  // box, and with send, send it at once.
+  onUseSuggestion?: (action: string, send: boolean) => void;
 }) {
   const [endingTurn, setEndingTurn] = useState(false);
   const t = useT();
@@ -45,6 +50,31 @@ export function FloorBanners({
     floor.mode === "initiative" && meUserId !== "" && floor.userIds.includes(meUserId);
   // The End Turn is in and the move waits on a watcher's stop.
   const held = useTurnHeld(encounter);
+  // "Suggest my move" (winks fork): options for this turn only, so they are
+  // keyed like the refusal and vanish when the turn moves on.
+  const [suggestEntry, setSuggestEntry] = useState<{ stamp: string; options: MoveSuggestion[]; error: string } | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const turnStamp: string = refusalKey;
+  const suggestions = suggestEntry && suggestEntry.stamp === turnStamp ? suggestEntry : null;
+
+  async function suggest() {
+    setSuggesting(true);
+    const stamp = turnStamp;
+    try {
+      const response = await fetch(`/api/campaigns/${campaignId}/suggest`, { method: "POST" });
+      const data = (await response.json().catch(() => ({}))) as { options?: MoveSuggestion[]; error?: string };
+      setSuggestEntry({ stamp, options: response.ok ? (data.options ?? []) : [], error: response.ok ? "" : (data.error ?? t("No suggestions right now.")) });
+    } catch {
+      setSuggestEntry({ stamp, options: [], error: t("Could not reach the table.") });
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  function applySuggestion(action: string, send: boolean) {
+    setSuggestEntry(null);
+    onUseSuggestion?.(action, send);
+  }
 
   // Attacks no longer end the turn by themselves (movement and bonus
   // actions stay open), so this is the player's way to say "done".
@@ -74,6 +104,18 @@ export function FloorBanners({
           actions={
             myInitiativeTurn || steersStory ? (
               <>
+                {myInitiativeTurn && onUseSuggestion ? (
+                  <button
+                    type="button"
+                    onClick={() => void suggest()}
+                    disabled={suggesting || Boolean(held)}
+                    aria-busy={suggesting ? true : undefined}
+                    className={bannerButtonClass()}
+                    title={t("Not sure what to do? Get three good options for this turn.")}
+                  >
+                    {suggesting ? t("Thinking…") : t("Suggest")}
+                  </button>
+                ) : null}
                 {myInitiativeTurn ? (
                   <button
                     type="button"
@@ -136,6 +178,41 @@ export function FloorBanners({
           {refusal ? (
             <span key={refusal} role="alert" className="mt-0.5 block animate-fade-up text-xs text-amber-200">
               {refusal}
+            </span>
+          ) : null}
+          {myInitiativeTurn && suggestions ? (
+            <span className="mt-1.5 block animate-fade-up space-y-1.5" data-suggestions="">
+              {suggestions.error ? (
+                <span role="alert" className="block text-xs text-amber-200">
+                  {suggestions.error}
+                </span>
+              ) : null}
+              {suggestions.options.map((option, index) => (
+                <span key={`${index}-${option.label}`} className="flex items-start gap-2 rounded-md border border-amber-900/50 bg-stone-950/40 px-2 py-1.5">
+                  <span className="min-w-0 flex-1">
+                    <span className="block text-xs font-semibold text-amber-100">{option.label}</span>
+                    {option.why ? <span className="block text-xs text-stone-300">{option.why}</span> : null}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => applySuggestion(option.action, false)}
+                    className={bannerButtonClass()}
+                    title={option.action}
+                  >
+                    {t("Use")}
+                  </button>
+                  {index === 0 ? (
+                    <button
+                      type="button"
+                      onClick={() => applySuggestion(option.action, true)}
+                      className={bannerButtonClass(true)}
+                      title={option.action}
+                    >
+                      {t("Do it for me")}
+                    </button>
+                  ) : null}
+                </span>
+              ))}
             </span>
           ) : null}
         </SessionBanner>

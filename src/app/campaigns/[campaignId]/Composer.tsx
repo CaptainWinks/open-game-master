@@ -385,6 +385,13 @@ function ComposerInner({
           steersStory={steersStory}
           meUserId={meUserId}
           onRelease={onReleaseFloor}
+          onUseSuggestion={(action, send) => {
+            onKindChange("do");
+            setInput(action);
+            // Sent once the box holds the text: the form's own submit reads it.
+            if (send) window.setTimeout(() => composerRef.current?.form?.requestSubmit(), 60);
+            else window.setTimeout(() => composerRef.current?.focus(), 0);
+          }}
         />
         <SideNotice encounter={encounter ?? null} sheets={sheets} meUserId={meUserId} />
         <ElsewhereNotice party={party} sheets={sheets} meUserId={meUserId} />
