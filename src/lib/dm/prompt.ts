@@ -2047,14 +2047,33 @@ function turnRuleParts(state: TurnRuleState): {
     rulesCarrySecret = Boolean(secretRules);
   }
   const dmSystem = buildDmSystem(state.campaign, settingsRules, state.ruleContext ?? null);
-  const fightRules = state.encounter
-    ? `${encounterRulesText(tracksAmmunition(state.campaign), state.ruleContext ?? null)}\n${fightNarrationRule(state.campaign.gameSettings?.narrationLength)}`
-    : "";
+  const fightRules = state.encounter ? fightRulesText(state.campaign, state.ruleContext ?? null) : "";
   return { dmSystem, fightRules, secretRules, rulesCarrySecret };
 }
 
+// Whether a prompt message already holds a fight's rules (the full rules'
+// opening line, or the short rules' one).
+export function carriesFightRules(text: string): boolean {
+  return text.includes("Combat rules (an encounter is active):") || text.includes("A fight is on. Follow the initiative order in GAME STATE");
+}
+
+// A fight's rules: what the system message carries while one runs.
+export function fightRulesText(campaign: Campaign, ruleContext: RuleContext | null): string {
+  return `${encounterRulesText(tracksAmmunition(campaign), ruleContext)}\n${fightNarrationRule(campaign.gameSettings?.narrationLength)}`;
+}
+
+// With one tool list in and out of a fight (winks fork, DM_STEADY_TOOLS=1,
+// src/lib/dm/turn.ts steadyTurnTools), a fight's rules ride with the state
+// after the rules instead of in the system message, so a fight's start and
+// end leave the cached start of the prompt as it was. Only where the state
+// has its own message (stateAfterRules); src/lib/dm/turn.ts hands them to a
+// turn whose fight began after its prompt was built.
+function fightRulesWithState(): boolean {
+  return process.env.DM_STEADY_TOOLS === "1";
+}
+
 function rulesAhead(dmSystem: string, turnAt: number, fightRules: string): string {
-  return [dmSystem.slice(0, turnAt).trimEnd(), fightRules].filter(Boolean).join("\n\n");
+  return [dmSystem.slice(0, turnAt).trimEnd(), fightRulesWithState() ? "" : fightRules].filter(Boolean).join("\n\n");
 }
 
 // A turn's first message when its state rides after the rules
@@ -2312,7 +2331,7 @@ export function buildDmMessages(
   let table = "";
   if (turnAt >= 0) {
     rules = rulesAhead(dmSystem, turnAt, fightRules);
-    table = [dmSystem.slice(turnAt), whisperRules, gameStateBlock].filter(Boolean).join("\n\n");
+    table = [dmSystem.slice(turnAt), fightRulesWithState() ? fightRules : "", whisperRules, gameStateBlock].filter(Boolean).join("\n\n");
   }
   let moment = "";
   if (state.momentAfterHistory) {
