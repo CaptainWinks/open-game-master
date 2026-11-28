@@ -1072,6 +1072,9 @@ async function openTurn(
       // The state keeps its place before the transcript, as its own message
       // (src/lib/dm/prompt.ts stateAfterRules).
       stateAfterRules: campaign.settings.textProvider !== "harness",
+      // And the standing state after the transcript as well (winks fork,
+      // src/lib/dm/prompt.ts standingAfterHistory).
+      standingAfterHistory: process.env.DM_STATE_AFTER_HISTORY === "1",
       currentLocation: currentLocation
         ? {
             name: currentLocation.name,

@@ -291,6 +291,15 @@ export type DmGameState = {
   // tokens and 140 seconds on a BC-250, where now the tools and rules are
   // reused. An agent program's rendering splits the prompt itself.
   stateAfterRules?: boolean;
+  // With momentAfterHistory and stateAfterRules both on: the standing state
+  // (everything from THIS_TURN_HEADING to the moment) rides after the
+  // transcript too, in the moment's message, so nothing between the rules
+  // and the history changes from turn to turn. A prompt cache that keeps
+  // the history then reuses it when the scene, the quests or an NPC's
+  // standing move, not only when the standing state stays word for word
+  // the same (winks fork: on Claude the history was written to the cache
+  // again on 10 of 11 turns). DM_STATE_AFTER_HISTORY=1 turns it on.
+  standingAfterHistory?: boolean;
   currentLocation?: {
     name: string;
     layoutDescription: string;
@@ -2316,6 +2325,11 @@ export function buildDmMessages(
   // with the moment, after the transcript (src/lib/dm/narration-tidy-logic.ts).
   const sameClosing = repeatedClosing(history.filter((message) => message.authorType === "dm").map((message) => message.content));
   const variety = sameClosing ? closingVarietyNote(sameClosing) : "";
+  // The standing state after the transcript, ahead of the moment
+  // (standingAfterHistory): only with the moment there too, so the
+  // instruction to take the turn still closes the message.
+  const standingLast = table && moment && state.standingAfterHistory ? table : "";
+  if (standingLast) table = "";
   const historyStart = (table ? 2 : 1) + (gapNote ? 1 : 0);
   const messages: ChatMessage[] = [
     { role: "system", content: rules },
@@ -2325,7 +2339,7 @@ export function buildDmMessages(
     // The state, then the instruction to take the turn, so the newest player
     // line is still what the model resolves (src/lib/prompt-boundary.ts).
     ...(moment
-      ? [{ role: "user" as const, content: [moment, variety, MOMENT_INSTRUCTION].filter(Boolean).join("\n\n") }]
+      ? [{ role: "user" as const, content: [standingLast, moment, variety, MOMENT_INSTRUCTION].filter(Boolean).join("\n\n") }]
       : variety
         ? [{ role: "user" as const, content: variety }]
         : []),

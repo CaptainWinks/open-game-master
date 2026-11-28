@@ -545,6 +545,20 @@ test("a chat model reads the rules as the system message and the state as the me
   const both = buildDmMessages({ ...plain, stateAfterRules: true, momentAfterHistory: true }, history);
   assert.ok(both[1].content.startsWith(THIS_TURN_HEADING) && !both[1].content.includes(THIS_MOMENT_HEADING));
   assert.ok(both[2 + history.length].content.startsWith(THIS_MOMENT_HEADING));
+  // And the standing state after the transcript too (winks fork): the
+  // system message, then the history, then one message holding the
+  // standing state, the moment and the instruction, in that order, and the
+  // director's note still last.
+  const late = { ...plain, stateAfterRules: true, momentAfterHistory: true, standingAfterHistory: true };
+  const after2 = buildDmMessages(late, history);
+  assert.equal(after2.length, 3 + history.length);
+  assert.equal(after2.at(-1).content, "DIRECTOR: the bell rings once.");
+  assert.equal(after2[0].content, both[0].content, "the system message is the same");
+  assert.deepEqual(after2.slice(1, 1 + history.length), both.slice(2, 2 + history.length), "the history follows the rules");
+  assert.equal(late.contextTrace.shape.historyStart, 1);
+  const last = after2.at(-2).content;
+  assert.ok(last.startsWith(both[1].content), "the standing state is word for word the same, first");
+  assert.ok(last.indexOf(THIS_MOMENT_HEADING) > both[1].content.length && last.endsWith(MOMENT_INSTRUCTION));
 });
 
 // What Claude Code caches as its second system block: everything after the
