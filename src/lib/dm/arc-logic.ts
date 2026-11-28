@@ -2891,13 +2891,20 @@ export function renderArcPrompt(arc: StoryArc, cues?: SceneCues): { text: string
       cues,
       (event) => eventLine(event).length,
     );
-    for (const event of selection.included) {
+    // Relevance picks which events are shown; they are listed in the arc's
+    // own order (winks fork). Listed by relevance, the same events came in a
+    // new order nearly every turn, and this text sits before the history in
+    // the prompt, so the history could never be read from the model's
+    // prompt cache. The trace keeps the relevance order.
+    const arcOrder = new Map(pending.map((event, index) => [event.id, index]));
+    const inArcOrder = (a: string, b: string) => (arcOrder.get(a) ?? 0) - (arcOrder.get(b) ?? 0);
+    for (const event of [...selection.included].sort((a, b) => inArcOrder(a.id, b.id))) {
       lines.push(eventLine(event));
     }
     trace.events = selection.picks;
     trace.chars = selection.chars;
     trace.budgetChars = RENDER_EVENT_CHARS;
-    const held = selection.picks.filter((pick) => !pick.included);
+    const held = selection.picks.filter((pick) => !pick.included).sort((a, b) => inArcOrder(a.id, b.id));
     const carded = selection.included.some((event) => event.cardId);
     if (held.length || carded) {
       lines.push(
